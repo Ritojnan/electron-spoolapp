@@ -21,6 +21,10 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+        
+      - name: Set up GitHub Personal Access Token
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Build macOS
         run: npm run build-exe
