@@ -1,0 +1,314 @@
+const path = require("path");
+const os = require("os");
+const fs = require("fs");
+const { exec } = require("child_process");
+const AutoLaunch = require("auto-launch");
+
+const appFolder = path.dirname(process.execPath);
+const updateExe = path.resolve(appFolder, "..", "spoolapp.exe");
+const exeName = path.basename(process.execPath);
+
+const resizeImg = require("resize-img");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+
+const isDev = process.env.NODE_ENV !== "production";
+const isMac = process.platform === "darwin";
+
+let mainWindow;
+let homeWindow;
+
+// Main Window
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 300,
+    height: 300,
+    backgroundColor: "#161515",
+    icon: `${__dirname}/assets/icons/logo.png`,
+    resizable: isDev,
+    title: "spoolapp",
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  mainWindow.setTitle("spoolapp");
+
+  mainWindow.setMenuBarVisibility(false);
+
+  // Show devtools automatically if in development
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
+
+  // mainWindow.loadURL(`file://${__dirname}/renderer/index.html`);
+  mainWindow.loadFile(path.join(__dirname, "./renderer/index.html"));
+}
+
+// About Window
+function createAboutWindow() {
+  homeWindow = new BrowserWindow({
+    width: 300,
+    height: 300,
+    title: "spoolapp",
+    icon: `${__dirname}/assets/icons/logo.png`,
+  });
+
+  homeWindow.loadFile(path.join(__dirname, "./renderer/homepage.html"));
+}
+
+console.log("Home window called");
+
+function getAllProcesses(callback) {
+  const command = "tasklist /FO CSV /NH";
+  exec(command, (error, stdout) => {
+    if (error) {
+      console.error("Error retrieving process list:", error);
+      callback([]);
+    } else {
+      const processes = parseTasklistOutput(stdout);
+      callback(processes);
+    }
+  });
+}
+
+function parseTasklistOutput(output) {
+  const lines = output.trim().split("\n");
+  const processes = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim().replace(/"/g, "");
+    const values = line.split(",");
+
+    if (values.length >= 2) {
+      const processName = values[0];
+      const processId = parseInt(values[1]);
+
+      processes.push({ name: processName, id: processId });
+    }
+  }
+
+  return processes;
+}
+
+//
+
+// When the app is ready, create the window
+app.on("ready", () => {
+  createMainWindow();
+
+  // const mainMenu = Menu.buildFromTemplate(menu);
+  // Menu.setApplicationMenu(mainMenu);
+  // if (isDev) {
+  //   launchAtStartup();
+  //   console.log(appFolder);
+  //   console.log(updateExe);
+  //   console.log(exeName);
+  // }
+
+  let autoLaunch = new AutoLaunch({
+    name: "spoolapp",
+    path: app.getPath("exe"),
+  });
+  autoLaunch.isEnabled().then((isEnabled) => {
+    if (!isEnabled) {
+      autoLaunch.enable();
+    }
+  });
+
+  getAllProcesses((processes) => {
+    processes.forEach((object) => {
+      const value = object.name;
+      if (value === "Zoom.exe") {
+        console.log("Yess");
+        console.log(value);
+        if (!mainWindow) {
+          // Check if mainWindow doesn't already exist
+          createMainWindow();
+        }
+      }
+    });
+    console.log("Running processes:", processes);
+  });
+
+  mainWindow.on("closed", () => (mainWindow = null));
+});
+
+// function launchAtStartup() {
+//   if (process.platform === "darwin") {
+//     app.setLoginItemSettings({
+//       openAtLogin: true,
+//       // openAsHidden: true,
+//     });
+//   } else {
+//     app.setLoginItemSettings({
+//       openAtLogin: true,
+//       // openAsHidden: true,
+//       path: updateExe,
+//       args: [
+//         "--processStart",
+//         `"${exeName}"`,
+
+//         "--process-start-args",
+//         `"--hidden"`,
+//       ],
+//     });
+//   }
+// }
+
+console.log(app.getPath("exe"));
+console.log(updateExe);
+
+// function launchAtStartup() {
+//   if (process.platform === "darwin") {
+//     const autoLauncher = new AutoLaunch({
+//       name: "spoolapp",
+//       path: "/Applications/spoolapp.app",
+//     });
+
+//     autoLauncher
+//       .isEnabled()
+//       .then((isEnabled) => {
+//         if (!isEnabled) {
+//           autoLauncher.enable();
+//         }
+//       })
+//       .catch((err) => {
+//         console.error("Error setting app as login item:", err);
+//       });
+//   } else {
+//     const autoLauncher = new AutoLaunch({
+//       name: "spoolapp",
+//       path: app.getPath("exe"),
+//     });
+
+//     autoLauncher
+//       .isEnabled()
+//       .then((isEnabled) => {
+//         if (!isEnabled) {
+//           autoLauncher.enable();
+//         }
+//       })
+//       .catch((err) => {
+//         console.error("Error setting app as login item:", err);
+//       });
+//   }
+// }
+
+// Menu template
+const menu = [
+  ...(isMac
+    ? [
+        {
+          label: app.name,
+          submenu: [
+            {
+              label: "About",
+              click: createAboutWindow,
+            },
+          ],
+        },
+      ]
+    : []),
+  {
+    role: "fileMenu",
+  },
+  ...(!isMac
+    ? [
+        {
+          label: "Help",
+          submenu: [
+            {
+              label: "About",
+              click: createAboutWindow,
+            },
+          ],
+        },
+      ]
+    : []),
+  // {
+  //   label: 'File',
+  //   submenu: [
+  //     {
+  //       label: 'Quit',
+  //       click: () => app.quit(),
+  //       accelerator: 'CmdOrCtrl+W',
+  //     },
+  //   ],
+  // },
+  ...(isDev
+    ? [
+        {
+          label: "Developer",
+          submenu: [
+            { role: "reload" },
+            { role: "forcereload" },
+            { type: "separator" },
+            { role: "toggledevtools" },
+          ],
+        },
+      ]
+    : []),
+];
+
+//
+ipcMain.on("get-background-processes", (event, arg) => {
+  // Emit the get-background-processes event
+  event.sender.emit("get-background-processes");
+});
+
+//
+
+// Respond to the resize image event
+ipcMain.on("image:resize", (e, options) => {
+  // console.log(options);
+  options.dest = path.join(os.homedir(), "imageresizer");
+  resizeImage(options);
+});
+
+ipcMain.on("resize-me-please", (event, arg) => {
+  mainWindow.setSize(arg.width, arg.height);
+});
+
+// Resize and save image
+async function resizeImage({ imgPath, height, width, dest }) {
+  try {
+    // console.log(imgPath, height, width, dest);
+
+    // Resize image
+    const newPath = await resizeImg(fs.readFileSync(imgPath), {
+      width: +width,
+      height: +height,
+    });
+
+    // Get filename
+    const filename = path.basename(imgPath);
+
+    // Create destination folder if it doesn't exist
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest);
+    }
+
+    // Write the file to the destination folder
+    fs.writeFileSync(path.join(dest, filename), newPath);
+
+    // Send success to renderer
+    mainWindow.webContents.send("image:done");
+
+    // Open the folder in the file explorer
+    shell.openPath(dest);
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+// Quit when all windows are closed.
+app.on("window-all-closed", () => {
+  if (!isMac) app.quit();
+});
+
+// Open a window if none are open (macOS)
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+});

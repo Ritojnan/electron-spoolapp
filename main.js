@@ -1,0 +1,394 @@
+const path = require("path");
+const os = require("os");
+const fs = require("fs");
+
+const { exec } = require("child_process");
+const AutoLaunch = require("auto-launch");
+let count = 1;
+
+// const psList = require("ps-list");
+
+const appFolder = path.dirname(process.execPath);
+const updateExe = path.resolve(appFolder, "..", "spoolapp.exe");
+const exeName = path.basename(process.execPath);
+
+const resizeImg = require("resize-img");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+
+const isDev = process.env.NODE_ENV !== "production";
+const isMac = process.platform === "darwin";
+
+////Store n gotTheLock added by Deval -BEGIN
+const Store = require('electron-store');
+//const psList = require('ps-list');
+const store = new Store();
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
+////Store n gotTheLock added by Deval -END
+
+let mainWindow;
+let windowRef;
+let DemoWindow;
+let zoomWindowActivity;
+
+const pollInterval = 5000; // Interval in milliseconds to poll for new processes
+
+// Main Window
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 300,
+    height: 300,
+    backgroundColor: "#161515",
+    icon: `${__dirname}/assets/icons/logo.png`,
+    resizable: isDev,
+    // show: false,
+    frame: false,
+    title: "spoolapp",
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  mainWindow.setTitle("spoolapp");
+  // mainWindow.setMenuBarVisibility(false);
+  // mainWindow.removeMenu();
+  // mainWindow.restore();
+
+  // Show devtools automatically if in development
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
+
+  // mainWindow.loadURL(`file://${__dirname}/renderer/index.html`);
+  mainWindow.loadFile(path.join(__dirname, "./renderer/index.html"));
+}
+
+// DemoWindow
+function createDemoWindow() {
+  DemoWindow = new BrowserWindow({
+    width: 300,
+    height: 300,
+    backgroundColor: "#161515",
+    icon: `${__dirname}/assets/icons/logo.png`,
+    resizable: isDev,
+    title: "spoolapp",
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  mainWindow.setTitle("spoolapp");
+
+  mainWindow.setMenuBarVisibility(false);
+
+  // Show devtools automatically if in development
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
+
+  // mainWindow.loadURL(`file://${__dirname}/renderer/index.html`);
+  mainWindow.loadFile(path.join(__dirname, "./renderer/index.html"));
+}
+
+console.log("Home window called");
+
+//------------------------------------
+
+ipcMain.on("minimize", () => {
+  mainWindow.minimize();
+});
+
+ipcMain.on("maximize", () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
+
+ipcMain.on("unmaximize", () => {
+  mainWindow.unmaximize();
+});
+ 
+ipcMain.on("close", () => {
+	//Deval commented as a workaround, dont allow uer to close the app-window
+  //mainWindow.hide();
+});
+
+////Deval added second-instance as a workaround, 
+////dont allow uer to close the app-window
+////if user tries to open multiple, bring up existing 
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+	console.log("in second instance req");
+    if (mainWindow) {
+		console.log("Denying new instnace");
+      if (mainWindow.isMinimized()) 
+		  mainWindow.restore();
+      mainWindow.focus();
+    }
+  })
+  
+// --------------------------------------
+
+function getAllProcesses(callback) {
+
+	if (!isMac) {
+		  ////Deval updated command. Original command: tasklist /FO CSV /NH
+		  const command = "tasklist /fi \"IMAGENAME eq ZOOM.EXE\" /FO CSV /NH /V";
+		 
+		  exec(command, (error, stdout) => {
+			if (error) {
+			  console.error("Error retrieving process list:", error);
+			  callback([]);
+			} else {
+				//console.log(stdout);
+			  const processes = parseTasklistOutput(stdout);
+			  //console.log(processes);
+			  callback(processes);
+			}
+		  });
+	 }
+	 else {
+		  const command = "pgrep -xq zoom.us";
+		 
+		  exec(command, (error, stdout) => {
+			if (error) {
+			  console.error("Error retrieving process list:", error);
+			  callback([]);
+			} else {
+			   //console.log(error);                  
+			  //console.log(stdout);
+			  const processes = [];
+			   processes.push({ name: "Zoom.exe", id: 111, window: "Zoom" });
+			  //console.log(processes);
+			  callback(processes);
+			}
+		  });
+	 }
+}
+
+function parseTasklistOutput(output) {
+  const lines = output.trim().split("\n");
+  const processes = [];
+
+  for (let i = 0; i < lines.length; i++) {
+	  //console.log(lines[i].trim());
+    const line = lines[i].trim().replace(/"/g, "");
+    const values = line.split(",");
+
+    // console.log(values);
+    if (values.length >= 2) {
+      const processName = values[0];
+      const processId = parseInt(values[1]);
+
+		////Deval updated below to find out if BE Zoom is attached to Frontend, 
+		////i.e. if Zoom FE started and not just BE
+      //processes.push({ name: processName, id: processId, window: values[3] });
+	  processes.push({ name: processName, id: processId, window: values[values.length-1] });
+    }
+  }
+
+  return processes;
+}
+
+// getAllProcesses((processes) => {
+//   processes.forEach((object) => {
+//     const value = object.name;
+//     if (value === "Zoom.exe") {
+//       console.log("Yess");
+//       // console.log(value);
+//       if (!mainWindow) {
+//         // Check if mainWindow doesn't already exist
+//         createMainWindow();
+//       }
+//     }
+//   });
+//   console.log("Running processes:", processes);
+// });
+
+let shouldShowMainWindow = true;
+var  zoomProcessExists = false;
+
+function ReccursiveCall() {
+  getAllProcesses((processes) => {
+    zoomProcessExists = processes.find(
+      (process) => (process.name === "Zoom.exe" && process.window==="Zoom") ////Deval updated this
+    );
+	
+	
+     if (zoomProcessExists) {
+	   
+      if (shouldShowMainWindow) {
+		  
+		  ////Deval added BEGIN 
+		   if (mainWindow.isMinimized()) 
+			  mainWindow.restore();
+		   //mainWindow.focus();
+		  ////Deval added END
+		  
+        console.log("Process just started");
+        mainWindow.show();
+        mainWindow.setAlwaysOnTop(true);
+      } else {
+        console.log("Process is running");
+        /*if (mainWindow.isVisible()) {
+          // The mainWindow is currently visible
+          console.log("The mainWindow is visible");
+          mainWindow.setAlwaysOnTop(true);
+        } else {
+          // The mainWindow is currently hidden
+          if (!mainWindow.isMinimized()) {
+            mainWindow.show();
+            mainWindow.setAlwaysOnTop(true);
+          }
+        }*/
+      }
+      shouldShowMainWindow = false;
+    } else {
+      shouldShowMainWindow = true;
+    }
+  });
+
+  setTimeout(ReccursiveCall, 10000); ////change 1000 ms i.e. 1 sec to 10 sec, 10K MS, DEVAL
+}
+// -------------------------------------
+// When the app is ready, create the window
+
+app.on("ready", () => {
+  createMainWindow();
+
+  // const contentBounds = mainWindow.getContentBounds();
+  // const frameHeight = mainWindow.getBounds().height - contentBounds.height;
+
+  // console.log("Frame height:", frameHeight);
+	
+  ReccursiveCall();
+  
+  var autolauncher = new AutoLaunch({
+    name: "spoolapp",
+    path: app.getPath("exe"),
+  });
+
+  autolauncher.enable();
+
+  autolauncher
+    .isEnabled()
+    .then(function (isEnabled) {
+      if (isEnabled) {
+        return;
+      }
+      minecraftAutoLauncher.enable();  /////???? whts this? Deval
+    })
+    .catch(function (err) {
+      // handle error
+      console.log(err);
+    });
+
+  mainWindow.on("closed", () => (mainWindow = null));
+});
+
+//
+
+// Menu template
+const menu = [
+  ...(isMac
+    ? [
+        {
+          label: app.name,
+          submenu: [
+            {
+              label: "About",
+              click: mainWindow,
+            },
+          ],
+        },
+      ]
+    : []),
+  {
+    role: "fileMenu",
+  },
+  ...(!isMac
+    ? [
+        {
+          label: "Help",
+          submenu: [
+            {
+              label: "About",
+              click: mainWindow,
+            },
+          ],
+        },
+      ]
+    : []),
+  // {
+  //   label: 'File',
+  //   submenu: [
+  //     {
+  //       label: 'Quit',
+  //       click: () => app.quit(),
+  //       accelerator: 'CmdOrCtrl+W',
+  //     },
+  //   ],
+  // },
+  ...(isDev
+    ? [
+        {
+          label: "Developer",
+          submenu: [
+            { role: "reload" },
+            { role: "forcereload" },
+            { type: "separator" },
+            { role: "toggledevtools" },
+          ],
+        },
+      ]
+    : []),
+];
+
+//
+ipcMain.on("get-background-processes", (event, arg) => {
+  // Emit the get-background-processes event
+  event.sender.emit("get-background-processes");
+});
+
+ipcMain.on("resize-me-please", (event, arg) => {
+  mainWindow.setSize(arg.width, arg.height);
+});
+
+app.on("before-quit", (event) => {
+  // Store a reference to the mainWindow object.
+  event.preventDefault();
+});
+
+
+////Deval added below errorInWindow n addStore - BEGIN
+ipcMain.on('saveMe', function(event, data){
+    console.log("*****", data)
+	//event.sender.send("eventFromMain", someReply);
+	//win.webContents.send('asynchronous-message', 
+	//		{'domain': store.get('domain'), 'userID':store.get('userID')});
+});
+
+ipcMain.on('addStore', function(event, data){
+    store.set('domain', data.domain);
+	store.set('userID', data.userID);
+	console.log(store.get('domain'));
+});
+////Deval added below errorInWindow n addStore - END
+
+// Quit when all windows are closed.
+app.on("window-all-closed", () => {
+  if (!isMac) app.quit();
+});
+
+// Open a window if none are open (macOS)
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+});
