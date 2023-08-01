@@ -1,7 +1,7 @@
 {
   "name": "spoolapp",
   "productName": "spoolapp",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "spoolapp",
   "title": "spoolapp",
   "type": "commonjs",
@@ -79,11 +79,7 @@
     ]
   },
   "scripts": {
-    "start": "electron-forge start",
-    "package":"electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-
+    "start": "electron .",
     "build-exe": "electron-builder",
     "single-exe": "electron-builder -p --win",
     "package-win": "electron-packager . spoolapp --overwrite --asar=true --platform=win32 --arch=ia32 --icon=assets/icons/logo.ico --prune=true --out=release-builds --version-string.CompanyName=CE --version-string.FileDescription=CE --version-string.ProductName='spoolapp'",
@@ -91,46 +87,6 @@
 
   },
   "keywords": [],
-  "config": {
-    "forge": {
-      "packagerConfig": {},
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "electron_publish_example"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "config": {}
-        }
-      ],
-      "publishers": [
-        {
-          "name": "@electron-forge/publisher-github",
-          "config": {
-            "repository": {
-              "owner": "erikhofer",
-              "name": "electron-publish-example",
-              "draft": true
-            }
-          }
-        }
-      ]
-    }
-  },
-
   "author": "",
   "license": "ISC",
   "devDependencies": {
@@ -138,16 +94,9 @@
     "electron": "^20.2.0",
     "electron-packager": "^17.1.1",
     "eslint-plugin-import": "^2.27.5",
-    "electron-builder":"^24.6.2",
-    "@electron-forge/cli": "^6.0.0-beta.54",
-    "@electron-forge/maker-deb": "^6.0.0-beta.54",
-    "@electron-forge/maker-rpm": "^6.0.0-beta.54",
-    "@electron-forge/maker-squirrel": "^6.0.0-beta.54",
-    "@electron-forge/maker-zip": "^6.0.0-beta.54",
-    "@electron-forge/publisher-github": "^6.0.0-beta.54"
+    "electron-builder":"^24.6.2"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.0",
     "auto-launch": "^5.0.6",
     "axios": "^1.4.0",
     "electron-remote": "^1.3.0",
