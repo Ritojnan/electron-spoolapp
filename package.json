@@ -121,7 +121,7 @@
           "name": "@electron-forge/publisher-github",
           "config": {
             "repository": {
-              "owner": "erikhofer",
+              "owner": "ritojnan",
               "name": "electron-publish-example",
               "draft": true
             }
